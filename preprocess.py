@@ -52,15 +52,11 @@ def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=
     dataset = tf.data.Dataset.from_tensor_slices(all_image_path)
     dataset = dataset.map(lambda x: load_and_preprocess_image(x,is_training))
 
-    if is_training:
+    if labels is not None:
         label_ds = tf.data.Dataset.from_tensor_slices(tf.cast(labels, tf.int32))
         dataset = tf.data.Dataset.zip((dataset, label_ds))
-        dataset = dataset.shuffle(buffer_size)  # depends on sample size
-
-    dataset = dataset.batch(batch_size)
     if is_training:
-        dataset = dataset.repeat()
-    else:
-        dataset = dataset.repeat(1)
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+        dataset = dataset.shuffle(buffer_size)
+    dataset = dataset.batch(batch_size)
+    #dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
