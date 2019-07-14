@@ -4,8 +4,8 @@ import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import cohen_kappa_score
 
-def quadratic_weighted_kappa(preds,actuals,N,eps=1e-10):
-
+def quadratic_weighted_kappa(actuals,preds,N=5):
+    eps=1e-10
     """ Returns a value between 1 and -1. With 1 being optimal"""
     #return cohen_kappa_score(preds, actuals, weights='quadratic')
     repeat_op = tf.tile(tf.reshape(tf.range(0, N), [N, 1]), [1, N])
@@ -22,5 +22,5 @@ def quadratic_weighted_kappa(preds,actuals,N,eps=1e-10):
 
     return (1-(num/(den+eps)))
 
-def sklearn_quadtratic_weighted_kappa(preds,actuals):
+def sklearn_quadratic_weighted_kappa(preds,actuals):
     return cohen_kappa_score(preds, actuals, weights='quadratic')

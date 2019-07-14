@@ -58,5 +58,6 @@ def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=
     if is_training:
         dataset = dataset.shuffle(buffer_size)
     dataset = dataset.batch(batch_size)
+    dataset = dataset.repeat()
     #dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
