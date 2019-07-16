@@ -93,18 +93,20 @@ def main(batch_size,
     df = df[df['Filename'].isin(all_image_paths)]
 
     df['Filename'] = training_dir+"/"+df['Filename'].astype(str)
+    print(df)
+    print(df.shape)
     train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
 
     generator = preprocess.tfdata_generator(df['Filename'][train_ind].values,
                                         df['Drscore'][train_ind].values,
                                         is_training=True,
-                                        buffer_size=len(train_ind),
+                                        buffer_size=1000,
                                         batch_size=batch_size)
 
     validation_generator = preprocess.tfdata_generator(df['Filename'][val_ind].values,
                                         df['Drscore'][val_ind].values,
                                         is_training=False,
-                                        buffer_size=len(val_ind),
+                                        buffer_size=500,
                                         batch_size=batch_size)
 
     ## various callbacks

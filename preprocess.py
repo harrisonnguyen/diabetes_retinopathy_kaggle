@@ -1,11 +1,11 @@
 import tensorflow as tf
 
 def preprocess_image(image):
-    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.decode_image(image, channels=3)
     image_size = tf.shape(image)
     #image = tf.image.resize_images(image, [331, 331])
     #image = tf.image.central_crop(image,0.9)
-
+    
     def f1(): return tf.image.crop_to_bounding_box(
                         image,
                         0,
@@ -18,6 +18,7 @@ def preprocess_image(image):
                         0,
                         image_size[1]+tf.cast((image_size[0]-image_size[1])/4,tf.int32),
                         image_size[1])
+    
     image = tf.cond(
         image_size[0] > image_size[1],
         true_fn=f2,
@@ -46,7 +47,7 @@ def load_and_preprocess_image(path,is_training):
 
     return image
 
-def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=1000,batch_size=32):
+def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=300,batch_size=32):
     '''Construct a data generator using `tf.Dataset`. '''
 
     dataset = tf.data.Dataset.from_tensor_slices(all_image_path)
