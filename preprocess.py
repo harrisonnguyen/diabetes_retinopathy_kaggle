@@ -5,7 +5,7 @@ def preprocess_image(image):
     image_size = tf.shape(image)
     #image = tf.image.resize_images(image, [331, 331])
     #image = tf.image.central_crop(image,0.9)
-    
+
     def f1(): return tf.image.crop_to_bounding_box(
                         image,
                         0,
@@ -18,7 +18,7 @@ def preprocess_image(image):
                         0,
                         image_size[1]+tf.cast((image_size[0]-image_size[1])/4,tf.int32),
                         image_size[1])
-    
+
     image = tf.cond(
         image_size[0] > image_size[1],
         true_fn=f2,
@@ -50,15 +50,15 @@ def load_and_preprocess_image(path,is_training):
 def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=300,batch_size=32):
     '''Construct a data generator using `tf.Dataset`. '''
 
-    dataset = tf.data.Dataset.from_tensor_slices(all_image_path)
-    dataset = dataset.map(lambda x: load_and_preprocess_image(x,is_training))
+    file_name = tf.data.Dataset.from_tensor_slices(all_image_path)
+    dataset = file_name.map(lambda x: load_and_preprocess_image(x,is_training))
 
     if labels is not None:
         label_ds = tf.data.Dataset.from_tensor_slices(tf.cast(labels, tf.int32))
-        dataset = tf.data.Dataset.zip((dataset, label_ds))
-    if is_training:
-        dataset = dataset.shuffle(buffer_size)
+        dataset = tf.data.Dataset.zip((dataset, label_ds,file_name))
+    #if is_training:
+        #dataset = dataset.shuffle(buffer_size)
     dataset = dataset.batch(batch_size)
-    dataset = dataset.repeat()
+    dataset = dataset.repeat(1)
     #dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset

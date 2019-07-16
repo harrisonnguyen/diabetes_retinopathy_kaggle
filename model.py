@@ -82,29 +82,30 @@ def main(batch_size,
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
     sess = tf.Session(config=config)
     tf.keras.backend.set_session(sess)
-    df = pd.read_csv("dataset/training-labels.csv")
-    df['Filename'] = df['Filename'].apply(change_file_ext)
-
+    df_train = pd.read_csv("dataset/training.csv")
+    df_val = pd.read_csv("dataset/validation.csv")
+    #df_train['Filename'] = df_train['Filename'].apply(change_file_ext)
+    #df_val['Filename'] = df_val['Filename'].apply(change_file_ext)
 
     #3 using subset of training data
+    """
     data_root = pathlib.Path(training_dir)
     all_image_paths = list(data_root.glob('*/*'))
     all_image_paths = [str(path).split("/")[-1] for path in data_root.iterdir()]
     df = df[df['Filename'].isin(all_image_paths)]
+    """
+    df_train['Filename'] = training_dir+"/"+df_train['Filename'].astype(str)
+    df_val['Filename'] = training_dir+"/"+df_val['Filename'].astype(str)
+    #train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
 
-    df['Filename'] = training_dir+"/"+df['Filename'].astype(str)
-    print(df)
-    print(df.shape)
-    train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
-
-    generator = preprocess.tfdata_generator(df['Filename'][train_ind].values,
-                                        df['Drscore'][train_ind].values,
+    generator = preprocess.tfdata_generator(df_train['Filename'].values,
+                                        df_val['Drscore'].values,
                                         is_training=True,
                                         buffer_size=1000,
                                         batch_size=batch_size)
 
-    validation_generator = preprocess.tfdata_generator(df['Filename'][val_ind].values,
-                                        df['Drscore'][val_ind].values,
+    validation_generator = preprocess.tfdata_generator(df_val['Filename'].values,
+                                        df_val['Drscore'].values,
                                         is_training=False,
                                         buffer_size=500,
                                         batch_size=batch_size)
