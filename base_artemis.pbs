@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -P RDS-FEI-NSEG-RW
-#PBS -l select=1:ncpus=2:ngpus=1:mem=12gb
-#PBS -l walltime=00:20:00
+#PBS -l select=1:ncpus=2:ngpus=1:mem=15gb
+#PBS -l walltime=10:00:00
 
 module load python/3.6.5
 source /home/hngu4068/tensor_prob/bin/activate
@@ -10,4 +10,5 @@ module load openmpi-gcc/3.1.3
 
 cd /project/RDS-FEI-NSEG-RW/diabetes_retinopathy_kaggle
 
-python model.py --checkpoint-dir /project/RDS-FEI-NSEG-RW/tensorflow_checkpoints/diabetes --epochs 50 --batch-size 16
+python model.py --checkpoint-dir /project/RDS-FEI-NSEG-RW/tensorflow_checkpoints/diabetes --epochs 50 --batch-size 8
+#python preprocess_test.py

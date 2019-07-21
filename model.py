@@ -99,15 +99,15 @@ def main(batch_size,
     #train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
 
     generator = preprocess.tfdata_generator(df_train['Filename'].values,
-                                        df_val['Drscore'].values,
+                                        df_train['Drscore'].values,
                                         is_training=True,
-                                        buffer_size=1000,
+                                        buffer_size=300,
                                         batch_size=batch_size)
 
     validation_generator = preprocess.tfdata_generator(df_val['Filename'].values,
                                         df_val['Drscore'].values,
                                         is_training=False,
-                                        buffer_size=500,
+                                        buffer_size=300,
                                         batch_size=batch_size)
 
     ## various callbacks
@@ -146,22 +146,22 @@ def main(batch_size,
         generator,
         epochs=epochs,
         initial_epoch=initial_epoch,
-        steps_per_epoch=len(train_ind)//batch_size,
+        steps_per_epoch=df_train.shape[0]//batch_size,
         verbose=1,
         validation_data=validation_generator,
-        validation_steps=len(val_ind)//batch_size,
+        validation_steps=df_val.shape[0]//batch_size,
         callbacks=[tensorboard_cbk,
                     checkpoint_cbk])
     iterator = validation_generator.make_one_shot_iterator()
     next_element = iterator.get_next()
     truth = np.array([])
-    for i in range(len(val_ind)//batch_size):
+    for i in range(df_val.shape[0]//batch_size):
         try:
             x,y = sess.run(next_element)
             truth = np.append(truth,y)
         except:
             break
-    validation_prediction = model.predict(validation_generator,steps=len(val_ind)//batch_size)
+    validation_prediction = model.predict(validation_generator,steps=df_val.shape[0]//batch_size)
     print(sklearn_quadratic_weighted_kappa(np.argmax(validation_prediction,axis=1),truth))
 
     """
