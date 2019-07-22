@@ -4,6 +4,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from keras import backend as K
 from tensorflow.keras.applications.xception import Xception
+from tensorflow.keras.applications.inception_v3 import InceptionV3
 
 from sklearn.model_selection import train_test_split
 from metrics import quadratic_weighted_kappa,sklearn_quadratic_weighted_kappa
@@ -21,12 +22,14 @@ def change_file_ext(x):
     return x
 
 def create_model():
-    base_model = Xception(weights='imagenet', include_top=False)
+    base_model = InceptionV3(weights='imagenet', include_top=False)
+    for i, layer in enumerate(base_model.layers):
+        print(i, layer.name)
     # add a global spatial average pooling layer
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
-    x = Dense(1024, activation='relu')(x)
+    x = Dense(512, activation='relu')(x)
     # and a logistic layer -- let's say we have 200 classes
     predictions = Dense(5, activation='softmax')(x)
 
@@ -39,7 +42,7 @@ def create_model():
     return model,base_model
 @click.command()
 @click.option('--batch-size',
-                default=16,
+                default=8,
                 type=click.INT,
                 help="Batch size",
                 show_default=True)
@@ -60,7 +63,7 @@ def create_model():
                 help="dir for test data",
                 show_default=True)
 @click.option('--checkpoint-dir',
-                default='/home/harrison/tensorflow_checkpoints/diabetes',
+                default='/home/harrison/tensorflow_checkpoints/diabetes/',
                 type=click.Path(
                     file_okay=False,
                     dir_okay=True,
@@ -73,7 +76,7 @@ def create_model():
                 help="Number of epochs to train",
                 show_default=True)
 @click.option('--n-fixed-layers',
-                default=131,
+                default=None,
                 type=click.INT,
                 help="Number of epochs to train",
                 show_default=True)
@@ -105,23 +108,24 @@ def main(batch_size,
     df_train['Filename'] = training_dir+"/"+df_train['Filename'].astype(str)
     df_val['Filename'] = training_dir+"/"+df_val['Filename'].astype(str)
     #train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
-
+    df_train = df_train[:500]
+    df_val = df_val[:500]
     generator = preprocess.tfdata_generator(df_train['Filename'].values,
                                         df_train['Drscore'].values,
                                         is_training=True,
-                                        buffer_size=300,
+                                        buffer_size=50,
                                         batch_size=batch_size)
 
     validation_generator = preprocess.tfdata_generator(df_val['Filename'].values,
                                         df_val['Drscore'].values,
                                         is_training=False,
-                                        buffer_size=300,
+                                        buffer_size=50,
                                         batch_size=batch_size)
 
     ## various callbacks
     tensorboard_cbk = tf.keras.callbacks.TensorBoard(log_dir=checkpoint_dir,
                                                     update_freq='epoch',
-                                                    write_grads=True,
+                                                    write_grads=False,
                                                     histogram_freq=1)
     checkpoint_cbk = tf.keras.callbacks.ModelCheckpoint(
         filepath=os.path.join(checkpoint_dir,'weights-{epoch:03d}.hdf5'),
@@ -147,14 +151,13 @@ def main(batch_size,
     else:
         model,base_model = create_model()
         initial_epoch = 0
-    for i, layer in enumerate(base_model.layers):
-        print(i, layer.name)
 
-    for layer in base_model.layers[:n_fixed_layers]:
-        layer.trainable = False
-    for layer in base_model.layers[n_fixed_layers:]:
-        layer.trainable = True
-        print("training layer {}".format(layer.name))
+    if n_fixed_layers:
+        for layer in base_model.layers[:n_fixed_layers]:
+            layer.trainable = False
+        for layer in base_model.layers[n_fixed_layers:]:
+            layer.trainable = True
+            print("training layer {}".format(layer.name))
 
     model.fit(
         generator,
