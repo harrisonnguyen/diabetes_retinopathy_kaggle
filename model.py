@@ -32,13 +32,14 @@ def create_model():
 
     # this is the model we will train
     model = Model(inputs=base_model.input, outputs=predictions)
-    model.compile(optimizer='rmsprop', loss='sparse_categorical_crossentropy',
+    optimiser = tf.keras.optimizers.Adam(lr=0.0005, beta_1=0.9, beta_2=0.999, epsilon=0.1, decay=4e-10, amsgrad=False)
+    model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
     return model,base_model
 @click.command()
 @click.option('--batch-size',
-                default=8,
+                default=16,
                 type=click.INT,
                 help="Batch size",
                 show_default=True)
@@ -71,18 +72,25 @@ def create_model():
                 type=click.INT,
                 help="Number of epochs to train",
                 show_default=True)
+@click.option('--n-fixed-layers',
+                default=131,
+                type=click.INT,
+                help="Number of epochs to train",
+                show_default=True)
 
 def main(batch_size,
         training_dir,
         test_dir,
         checkpoint_dir,
-        epochs):
+        epochs,
+        n_fixed_layers):
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
     sess = tf.Session(config=config)
     tf.keras.backend.set_session(sess)
-    df_train = pd.read_csv("dataset/training.csv")
+    df_train = pd.read_csv("dataset/training_combined.csv")
+    df_train = df_train.sample(frac=1,random_state=42)
     df_val = pd.read_csv("dataset/validation.csv")
     #df_train['Filename'] = df_train['Filename'].apply(change_file_ext)
     #df_val['Filename'] = df_val['Filename'].apply(change_file_ext)
@@ -139,9 +147,15 @@ def main(batch_size,
     else:
         model,base_model = create_model()
         initial_epoch = 0
+    for i, layer in enumerate(base_model.layers):
+        print(i, layer.name)
 
-    for layer in base_model.layers:
+    for layer in base_model.layers[:n_fixed_layers]:
         layer.trainable = False
+    for layer in base_model.layers[n_fixed_layers:]:
+        layer.trainable = True
+        print("training layer {}".format(layer.name))
+
     model.fit(
         generator,
         epochs=epochs,
@@ -159,10 +173,11 @@ def main(batch_size,
         try:
             x,y = sess.run(next_element)
             truth = np.append(truth,y)
-        except:
+        except tf.errors.OutOfRangeError:
             break
     validation_prediction = model.predict(validation_generator,steps=df_val.shape[0]//batch_size)
     print(sklearn_quadratic_weighted_kappa(np.argmax(validation_prediction,axis=1),truth))
+
 
     """
     test_df = pd.read_csv("dataset/SampleSubmission.csv")

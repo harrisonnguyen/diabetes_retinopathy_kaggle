@@ -47,7 +47,7 @@ def load_and_preprocess_image(path,is_training):
 
     return image
 
-def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=300,batch_size=32):
+def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=300,batch_size=32,n_epochs=None):
     '''Construct a data generator using `tf.Dataset`. '''
 
     file_name = tf.data.Dataset.from_tensor_slices(all_image_path)
@@ -59,6 +59,6 @@ def tfdata_generator(all_image_path, labels=None, is_training=False,buffer_size=
     if is_training:
         dataset = dataset.shuffle(buffer_size)
     dataset = dataset.batch(batch_size)
-    dataset = dataset.repeat()
+    dataset = dataset.repeat(count=n_epochs)
     #dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
