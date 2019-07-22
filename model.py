@@ -35,7 +35,7 @@ def create_model():
 
     # this is the model we will train
     model = Model(inputs=base_model.input, outputs=predictions)
-    optimiser = tf.keras.optimizers.Adam(lr=0.0005, beta_1=0.9, beta_2=0.999, epsilon=0.1, decay=4e-10, amsgrad=False)
+    optimiser = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=0.1, decay=4e-10, amsgrad=False)
     model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
@@ -108,8 +108,8 @@ def main(batch_size,
     df_train['Filename'] = training_dir+"/"+df_train['Filename'].astype(str)
     df_val['Filename'] = training_dir+"/"+df_val['Filename'].astype(str)
     #train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
-    df_train = df_train[:500]
-    df_val = df_val[:500]
+    #df_train = df_train[:500]
+    #df_val = df_val[:500]
     generator = preprocess.tfdata_generator(df_train['Filename'].values,
                                         df_train['Drscore'].values,
                                         is_training=True,
@@ -126,7 +126,7 @@ def main(batch_size,
     tensorboard_cbk = tf.keras.callbacks.TensorBoard(log_dir=checkpoint_dir,
                                                     update_freq='epoch',
                                                     write_grads=False,
-                                                    histogram_freq=1)
+                                                    histogram_freq=0)
     checkpoint_cbk = tf.keras.callbacks.ModelCheckpoint(
         filepath=os.path.join(checkpoint_dir,'weights-{epoch:03d}.hdf5'),
         save_best_only=True,

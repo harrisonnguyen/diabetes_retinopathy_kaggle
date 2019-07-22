@@ -10,5 +10,5 @@ module load openmpi-gcc/3.1.3
 
 cd /project/RDS-FEI-NSEG-RW/diabetes_retinopathy_kaggle
 
-python model.py --checkpoint-dir /project/RDS-FEI-NSEG-RW/tensorflow_checkpoints/diabetes --epochs 50 --batch-size 8
+python model.py --checkpoint-dir /project/RDS-FEI-NSEG-RW/tensorflow_checkpoints/diabetes/inceptionv3 --epochs 50 --batch-size 8
 #python preprocess_test.py
