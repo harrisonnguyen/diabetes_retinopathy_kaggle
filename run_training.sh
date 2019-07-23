@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-python model.py --epochs 10 --checkpoint-dir '/home/harrison/tensorflow_checkpoints/diabetes/inceptionv3'
+python model.py --epochs 10 --checkpoint-dir '/home/harrison/tensorflow_checkpoints/diabetes/inceptionv3' --batch-size 16

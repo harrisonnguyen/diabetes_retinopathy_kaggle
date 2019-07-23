@@ -5,6 +5,8 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from keras import backend as K
 from tensorflow.keras.applications.xception import Xception
 from tensorflow.keras.applications.inception_v3 import InceptionV3
+from tensorflow.keras import regularizers
+from tensorflow.keras import callbacks
 
 from sklearn.model_selection import train_test_split
 from metrics import quadratic_weighted_kappa,sklearn_quadratic_weighted_kappa
@@ -16,10 +18,21 @@ import pandas as pd
 import pathlib
 import numpy as np
 from glob import glob
+import os
+import math
 def change_file_ext(x):
     if 'tiff' == x.split(".")[-1] or 'tif' == x.split(".")[-1]:
         x = x.split(".")[0] + '.jpeg'
     return x
+
+def step_decay(epoch, lr):
+    # initial_lrate = 1.0 # no longer needed
+    drop = 0.9
+    epochs_drop = 3.0
+    lrate = lr * math.pow(drop,
+    math.floor((1+epoch)/epochs_drop))
+    return lrate
+
 
 def create_model():
     base_model = InceptionV3(weights='imagenet', include_top=False)
@@ -29,13 +42,14 @@ def create_model():
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
-    x = Dense(512, activation='relu')(x)
+    x = Dense(512, activation='relu',
+            kernel_regularizer=regularizers.l2(4e-10))(x)
     # and a logistic layer -- let's say we have 200 classes
     predictions = Dense(5, activation='softmax')(x)
 
     # this is the model we will train
     model = Model(inputs=base_model.input, outputs=predictions)
-    optimiser = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=0.1, decay=4e-10, amsgrad=False)
+    optimiser = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
     model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
@@ -80,13 +94,21 @@ def create_model():
                 type=click.INT,
                 help="Number of epochs to train",
                 show_default=True)
-
+@click.option('--logger-filename',
+                default='logger.log',
+                type=click.Path(
+                    file_okay=True,
+                    dir_okay=False,
+                    writable=True),
+                help="Filename of logger",
+                show_default=True)
 def main(batch_size,
         training_dir,
         test_dir,
         checkpoint_dir,
         epochs,
-        n_fixed_layers):
+        n_fixed_layers,
+        logger_filename):
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
@@ -123,21 +145,25 @@ def main(batch_size,
                                         batch_size=batch_size)
 
     ## various callbacks
-    tensorboard_cbk = tf.keras.callbacks.TensorBoard(log_dir=checkpoint_dir,
+    tensorboard_cbk = callbacks.TensorBoard(log_dir=checkpoint_dir,
                                                     update_freq='epoch',
                                                     write_grads=False,
                                                     histogram_freq=0)
-    checkpoint_cbk = tf.keras.callbacks.ModelCheckpoint(
+    checkpoint_cbk = callbacks.ModelCheckpoint(
         filepath=os.path.join(checkpoint_dir,'weights-{epoch:03d}.hdf5'),
         save_best_only=True,
         monitor='val_loss',
         verbose=1,
         save_weights_only=False)
-    earlystop_ckb = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+
+    earlystop_ckb = callbacks.EarlyStopping(monitor='val_loss',
                         patience=5,
                         restore_best_weights=False)
+    csv_callback = callbacks.CSVLogger(os.path.join(checkpoint_dir,logger_filename),append=True)
 
-
+    reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
+                              patience=5, min_lr=0.0001)
+    lr_scheduler = callbacks.LearningRateScheduler(step_decay)
 
     model,base_model = create_model()
 
@@ -168,7 +194,10 @@ def main(batch_size,
         validation_data=validation_generator,
         validation_steps=df_val.shape[0]//batch_size,
         callbacks=[tensorboard_cbk,
-                    checkpoint_cbk])
+                    checkpoint_cbk,
+                    csv_callback,
+                    reduce_lr,
+                    lr_scheduler])
     iterator = validation_generator.make_one_shot_iterator()
     next_element = iterator.get_next()
     truth = np.array([])
