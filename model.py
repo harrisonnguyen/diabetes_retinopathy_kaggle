@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D,Dropout
 from keras import backend as K
 from tensorflow.keras.applications.xception import Xception
 from tensorflow.keras.applications.inception_v3 import InceptionV3
@@ -28,7 +28,7 @@ def change_file_ext(x):
 def step_decay(epoch, lr):
     # initial_lrate = 1.0 # no longer needed
     drop = 0.9
-    epochs_drop = 3.0
+    epochs_drop = 1.0
     lrate = lr * math.pow(drop,
     math.floor((1+epoch)/epochs_drop))
     return lrate
@@ -43,13 +43,14 @@ def create_model():
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
     x = Dense(512, activation='relu',
-            kernel_regularizer=regularizers.l2(4e-10))(x)
+            kernel_regularizer=regularizers.l1_l2(l1=0.1, l2=4.0))(x)
+    x = Dropout(rate=0.5)(x)
     # and a logistic layer -- let's say we have 200 classes
     predictions = Dense(5, activation='softmax')(x)
 
     # this is the model we will train
     model = Model(inputs=base_model.input, outputs=predictions)
-    optimiser = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
+    optimiser = tf.keras.optimizers.Adam(lr=0.0005, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
     model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
@@ -102,13 +103,22 @@ def create_model():
                     writable=True),
                 help="Filename of logger",
                 show_default=True)
+@click.option('--weight-file',
+                default=None,
+                type=click.Path(
+                    file_okay=True,
+                    dir_okay=False,
+                    writable=True),
+                help="Filename to load model weights",
+                show_default=True)
 def main(batch_size,
         training_dir,
         test_dir,
         checkpoint_dir,
         epochs,
         n_fixed_layers,
-        logger_filename):
+        logger_filename,
+        weight_file):
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
@@ -135,7 +145,7 @@ def main(batch_size,
     generator = preprocess.tfdata_generator(df_train['Filename'].values,
                                         df_train['Drscore'].values,
                                         is_training=True,
-                                        buffer_size=50,
+                                        buffer_size=300,
                                         batch_size=batch_size)
 
     validation_generator = preprocess.tfdata_generator(df_val['Filename'].values,
@@ -162,14 +172,19 @@ def main(batch_size,
     csv_callback = callbacks.CSVLogger(os.path.join(checkpoint_dir,logger_filename),append=True)
 
     reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
-                              patience=5, min_lr=0.0001)
+                              patience=2, min_lr=0.000001)
     lr_scheduler = callbacks.LearningRateScheduler(step_decay)
 
     model,base_model = create_model()
 
     ## freeze upper layers
     files = sorted(glob(os.path.join(checkpoint_dir, 'weights-*.hdf5')))
-    if files:
+    if weight_file:
+        model_file = weight_file
+        initial_epoch = int(model_file[-8:-5])
+        print('Resuming using saved model %s.' % model_file)
+        model = tf.keras.models.load_model(model_file)
+    elif files:
         model_file = files[-1]
         initial_epoch = int(model_file[-8:-5])
         print('Resuming using saved model %s.' % model_file)
@@ -196,8 +211,7 @@ def main(batch_size,
         callbacks=[tensorboard_cbk,
                     checkpoint_cbk,
                     csv_callback,
-                    reduce_lr,
-                    lr_scheduler])
+                    reduce_lr])
     iterator = validation_generator.make_one_shot_iterator()
     next_element = iterator.get_next()
     truth = np.array([])
