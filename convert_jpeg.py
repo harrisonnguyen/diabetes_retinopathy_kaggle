@@ -16,7 +16,7 @@ def main(dir_path,to_path):
         for name in files:
             if os.path.splitext(os.path.join(root, name))[1].lower() == '.jpeg' or os.path.splitext(os.path.join(root, name))[1].lower() =='.jpg':
                 print("jpeg exists for {}".format(name))
-                copyfile(os.path.join(root, name), os.path.join(to_path, name))
+                #copyfile(os.path.join(root, name), os.path.join(to_path, name))
             elif os.path.splitext(os.path.join(root, name))[1].lower() == ".tiff" or os.path.splitext(os.path.join(root, name))[1].lower() == ".tif":
                 outfile = os.path.splitext(os.path.join(to_path, name))[0] + ".jpeg"
                 if not os.path.exists(outfile):

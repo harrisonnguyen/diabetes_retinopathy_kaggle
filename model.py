@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D,Dropout
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D,Dropout,Lambda
 from keras import backend as K
 from tensorflow.keras.applications.xception import Xception
 from tensorflow.keras.applications.inception_v3 import InceptionV3
@@ -20,10 +20,6 @@ import numpy as np
 from glob import glob
 import os
 import math
-def change_file_ext(x):
-    if 'tiff' == x.split(".")[-1] or 'tif' == x.split(".")[-1]:
-        x = x.split(".")[0] + '.jpeg'
-    return x
 
 def step_decay(epoch, lr):
     # initial_lrate = 1.0 # no longer needed
@@ -33,6 +29,8 @@ def step_decay(epoch, lr):
     math.floor((1+epoch)/epochs_drop))
     return lrate
 
+def argmax_layer(x):
+    return tf.cast(tf.keras.backend.argmax(x,axis=-1),tf.float32)
 
 def create_model():
     base_model = InceptionV3(weights='imagenet', include_top=False)
@@ -43,17 +41,26 @@ def create_model():
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
     x = Dense(512, activation='relu',
-            kernel_regularizer=regularizers.l1_l2(l1=0.1, l2=4.0))(x)
+            kernel_regularizer=regularizers.l1_l2(l1=1e-2, l2=1e-2))(x) #1e-4, 1e-4
     x = Dropout(rate=0.5)(x)
-    # and a logistic layer -- let's say we have 200 classes
-    predictions = Dense(5, activation='softmax')(x)
+    # and a logistic layer
+    predictions = Dense(5, activation='softmax',name='softmax')(x)
+    arg_predictions = Lambda(argmax_layer,name="argmax")(predictions)
 
     # this is the model we will train
-    model = Model(inputs=base_model.input, outputs=predictions)
-    optimiser = tf.keras.optimizers.Adam(lr=0.0005, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
-    model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
-                metrics=['accuracy'])
-
+    model = Model(inputs=base_model.input, outputs=[arg_predictions,predictions])
+    optimiser = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
+    #model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
+    #            metrics=['accuracy'])
+    loss_func ={
+        'argmax':"mse",
+    }
+    metrics={
+        'softmax':['sparse_categorical_crossentropy','accuracy'],
+        'argmax': ['mse']
+    }
+    model.compile(optimizer=optimiser, loss=loss_func,
+                metrics=metrics)
     return model,base_model
 @click.command()
 @click.option('--batch-size',
@@ -68,14 +75,6 @@ def create_model():
                     dir_okay=True,
                     writable=True),
                 help="dir for training data",
-                show_default=True)
-@click.option('--test-dir',
-            default='dataset/Test_jpeg',
-                type=click.Path(
-                    file_okay=False,
-                    dir_okay=True,
-                    writable=True),
-                help="dir for test data",
                 show_default=True)
 @click.option('--checkpoint-dir',
                 default='/home/harrison/tensorflow_checkpoints/diabetes/',
@@ -111,9 +110,9 @@ def create_model():
                     writable=True),
                 help="Filename to load model weights",
                 show_default=True)
+
 def main(batch_size,
         training_dir,
-        test_dir,
         checkpoint_dir,
         epochs,
         n_fixed_layers,
@@ -124,28 +123,19 @@ def main(batch_size,
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
     sess = tf.Session(config=config)
     tf.keras.backend.set_session(sess)
-    df_train = pd.read_csv("dataset/training_combined.csv")
+    df_train = pd.read_csv("dataset/training.csv")
     df_train = df_train.sample(frac=1,random_state=42)
     df_val = pd.read_csv("dataset/validation.csv")
-    #df_train['Filename'] = df_train['Filename'].apply(change_file_ext)
-    #df_val['Filename'] = df_val['Filename'].apply(change_file_ext)
 
     #3 using subset of training data
-    """
-    data_root = pathlib.Path(training_dir)
-    all_image_paths = list(data_root.glob('*/*'))
-    all_image_paths = [str(path).split("/")[-1] for path in data_root.iterdir()]
-    df = df[df['Filename'].isin(all_image_paths)]
-    """
     df_train['Filename'] = training_dir+"/"+df_train['Filename'].astype(str)
     df_val['Filename'] = training_dir+"/"+df_val['Filename'].astype(str)
-    #train_ind,val_ind = train_test_split(df.index.values,test_size=0.2,random_state=42)
-    #df_train = df_train[:500]
-    #df_val = df_val[:500]
+    #df_train = df_train[:100]
+    #df_val = df_val[:100]
     generator = preprocess.tfdata_generator(df_train['Filename'].values,
                                         df_train['Drscore'].values,
                                         is_training=True,
-                                        buffer_size=300,
+                                        buffer_size=50,
                                         batch_size=batch_size)
 
     validation_generator = preprocess.tfdata_generator(df_val['Filename'].values,
@@ -171,8 +161,8 @@ def main(batch_size,
                         restore_best_weights=False)
     csv_callback = callbacks.CSVLogger(os.path.join(checkpoint_dir,logger_filename),append=True)
 
-    reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
-                              patience=2, min_lr=0.000001)
+    reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
+                              patience=3, min_lr=1e-6)
     lr_scheduler = callbacks.LearningRateScheduler(step_decay)
 
     model,base_model = create_model()
@@ -190,7 +180,7 @@ def main(batch_size,
         print('Resuming using saved model %s.' % model_file)
         model = tf.keras.models.load_model(model_file)
     else:
-        model,base_model = create_model()
+        #model,base_model = create_model()
         initial_epoch = 0
 
     if n_fixed_layers:
@@ -212,28 +202,6 @@ def main(batch_size,
                     checkpoint_cbk,
                     csv_callback,
                     reduce_lr])
-    iterator = validation_generator.make_one_shot_iterator()
-    next_element = iterator.get_next()
-    truth = np.array([])
-    for i in range(df_val.shape[0]//batch_size):
-        try:
-            x,y = sess.run(next_element)
-            truth = np.append(truth,y)
-        except tf.errors.OutOfRangeError:
-            break
-    validation_prediction = model.predict(validation_generator,steps=df_val.shape[0]//batch_size)
-    print(sklearn_quadratic_weighted_kappa(np.argmax(validation_prediction,axis=1),truth))
 
-
-    """
-    test_df = pd.read_csv("dataset/SampleSubmission.csv")
-    test_df['Id'] = test_df['Id'].apply(change_file_ext)
-    test_df['Id'] = test_dir +"/" +test_df['Id'].astype(str)
-
-    test_generator = preprocess.tfdata_generator(test_df['Id'].values,
-                                        is_training=False)
-    predictions = model.predict(test_generator,steps=len(test_df['Id'].values)//batch_size)
-    print(np.argmax(predictions,axis=1))
-    """
 if __name__ == "__main__":
     exit(main())  # pragma: no cover
