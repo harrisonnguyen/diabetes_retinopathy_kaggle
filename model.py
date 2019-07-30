@@ -10,6 +10,7 @@ from tensorflow.keras import callbacks
 
 from sklearn.model_selection import train_test_split
 from metrics import quadratic_weighted_kappa,sklearn_quadratic_weighted_kappa
+from sklearn.utils.class_weight import compute_class_weight
 # create the base pre-trained model
 import preprocess
 import click
@@ -41,26 +42,27 @@ def create_model():
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
     x = Dense(512, activation='relu',
-            kernel_regularizer=regularizers.l1_l2(l1=1e-2, l2=1e-2))(x) #1e-4, 1e-4
+            kernel_regularizer=regularizers.l1_l2(l1=1e-1, l2=1e-1))(x) #1e-4, 1e-4
     x = Dropout(rate=0.5)(x)
     # and a logistic layer
-    predictions = Dense(5, activation='softmax',name='softmax')(x)
-    arg_predictions = Lambda(argmax_layer,name="argmax")(predictions)
+    action = lambda x: tf.keras.activations.relu(x,max_value=4)
+    predictions = Dense(1, activation=action)(x)
+    #arg_predictions = Lambda(argmax_layer,name="argmax")(predictions)
 
     # this is the model we will train
-    model = Model(inputs=base_model.input, outputs=[arg_predictions,predictions])
-    optimiser = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
-    #model.compile(optimizer=optimiser, loss='sparse_categorical_crossentropy',
-    #            metrics=['accuracy'])
-    loss_func ={
-        'argmax':"mse",
-    }
-    metrics={
-        'softmax':['sparse_categorical_crossentropy','accuracy'],
-        'argmax': ['mse']
-    }
-    model.compile(optimizer=optimiser, loss=loss_func,
-                metrics=metrics)
+    model = Model(inputs=base_model.input, outputs=predictions)
+    optimiser = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=0.1,amsgrad=False)
+    model.compile(optimizer=optimiser, loss='mse',
+                metrics=['accuracy'])
+    #loss_func ={
+    #    'argmax':"mse",
+    #}
+    #metrics={
+    #    'softmax':['sparse_categorical_crossentropy','accuracy'],
+    #    'argmax': ['mse']
+    #}
+    #model.compile(optimizer=optimiser, loss=loss_func,
+    #            metrics=metrics)
     return model,base_model
 @click.command()
 @click.option('--batch-size',
@@ -110,6 +112,8 @@ def create_model():
                     writable=True),
                 help="Filename to load model weights",
                 show_default=True)
+@click.option('--class-weight',
+                is_flag=True)
 
 def main(batch_size,
         training_dir,
@@ -117,7 +121,8 @@ def main(batch_size,
         epochs,
         n_fixed_layers,
         logger_filename,
-        weight_file):
+        weight_file,
+        class_weight):
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
@@ -189,7 +194,13 @@ def main(batch_size,
         for layer in base_model.layers[n_fixed_layers:]:
             layer.trainable = True
             print("training layer {}".format(layer.name))
-
+    if class_weight:
+        class_weights=compute_class_weight('balanced',
+                       np.unique(df_train["Drscore"].values),
+                       df_train["Drscore"].values)
+        weight_dict = dict([(i,class_weights[i]) for i in range(len(class_weights))])
+    else:
+        weight_dict=None
     model.fit(
         generator,
         epochs=epochs,
@@ -198,6 +209,7 @@ def main(batch_size,
         verbose=1,
         validation_data=validation_generator,
         validation_steps=df_val.shape[0]//batch_size,
+        class_weight=np.array(class_weights),
         callbacks=[tensorboard_cbk,
                     checkpoint_cbk,
                     csv_callback,

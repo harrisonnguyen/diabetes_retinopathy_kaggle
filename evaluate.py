@@ -75,7 +75,6 @@ def evaluate_validation(model,training_dir,batch_size):
                     writable=True),
                 help="dir for test data",
                 show_default=True)
-@click.option('--test', is_flag=True)
 @click.option('--training-dir',
                 default='dataset/output_combined2',
                 type=click.Path(
@@ -117,10 +116,9 @@ def main(weight_file,checkpoint_dir,
         #model,base_model = create_model()
         initial_epoch = 0
 
-    if test:
-        predict_test(model,test_dir,batch_size,output_file)
-    else:
-        print(evaluate_validation(model,training_dir,batch_size))
+    print(evaluate_validation(model,training_dir,batch_size))
+    predict_test(model,test_dir,batch_size,output_file)
+    #print(evaluate_validation(model,training_dir,batch_size))
 
 if __name__ == "__main__":
     exit(main())  # pragma: no cover
